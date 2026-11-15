@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#0b0e14">
+<title>Sou BTC Signals</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{--bg:#0b0e14;--card:#131824;--line:#222a3a;--txt:#e6e9f0;--mut:#7d869a;--g:#16c784;--r:#ea3943;--y:#f5b942}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:Inter,sans-serif;padding:14px 14px 40px;max-width:520px;margin:auto}
+.mono{font-family:'JetBrains Mono',monospace}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+h1{font-size:17px;font-weight:800;letter-spacing:.3px}
+h1 span{color:var(--y)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--r);display:inline-block;margin-right:5px}
+.dot.on{background:var(--g);box-shadow:0 0 8px var(--g)}
+.live{font-size:11px;color:var(--mut);display:flex;align-items:center}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:10px;margin:12px 0;overflow:hidden}
+.seg button{flex:1;padding:9px;background:none;border:0;color:var(--mut);font:600 13px Inter}
+.seg button.act{background:#1f2738;color:var(--txt)}
+.price{text-align:center;font-size:40px;font-weight:700;margin:6px 0 2px}
+.sub{text-align:center;color:var(--mut);font-size:12px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+#sig{text-align:center;transition:.3s}
+#sig .big{font-size:34px;font-weight:800;letter-spacing:1px}
+#sig.wait .big{color:var(--mut)}
+#sig.buy{border-color:var(--g);box-shadow:0 0 0 1px var(--g),0 0 30px #16c78455;animation:p 1.4s infinite}
+#sig.sell{border-color:var(--r);box-shadow:0 0 0 1px var(--r),0 0 30px #ea394355;animation:p 1.4s infinite}
+#sig.buy .big{color:var(--g)}#sig.sell .big{color:var(--r)}
+@keyframes p{50%{box-shadow:0 0 0 1px currentColor,0 0 6px transparent}}
+.lv{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.lv div{background:#0e131d;border-radius:10px;padding:9px;text-align:left}
+.lv small{color:var(--mut);font-size:11px;display:block}
+.lv b{font-size:19px}
+.lv button{float:right;background:#1f2738;border:0;color:var(--mut);border-radius:6px;font-size:10px;padding:3px 6px}
+.why{margin-top:10px;font-size:13px;color:#b9c0cf;line-height:1.4}
+.st{margin-top:8px;font-weight:700;font-size:14px}
+#chart{height:300px;border-radius:12px;overflow:hidden}
+label{font-size:12px;color:var(--mut)}
+input{width:100%;background:#0e131d;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px;font:600 15px Inter;margin-top:4px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.out{margin-top:10px;font-size:14px;line-height:1.6}
+h3{font-size:13px;color:var(--mut);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.hi{display:flex;justify-content:space-between;font-size:12px;padding:7px 0;border-bottom:1px solid var(--line)}
+.g{color:var(--g)}.r{color:var(--r)}.y{color:var(--y)}
+#start{position:fixed;inset:0;background:#0b0e14f2;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9;padding:30px;text-align:center}
+#start button{background:var(--y);color:#000;border:0;border-radius:14px;padding:18px 50px;font:800 20px Inter;margin:20px 0}
+#start p{color:var(--mut);font-size:13px;line-height:1.5}
+footer{color:var(--mut);font-size:11px;text-align:center;margin-top:14px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="start"><h1>Sou <span>BTC</span> Signals</h1><button id="go">Start</button><p>Tap Start to turn on sound alerts.<br>Keep this screen open. It stays awake by itself.</p></div>
+<header><h1>Sou <span>BTC</span> Signals</h1><div class="live"><i class="dot" id="dot"></i><span id="lt">CONNECTING</span></div></header>
+<div class="seg"><button data-m="scalp" class="act">Scalp · 5m</button><button data-m="day">Day · 15m</button></div>
+<div class="price mono" id="px">...</div>
+<div class="sub" id="trend">Loading market...</div>
+
+<div class="card wait" id="sig"><div class="big">WAIT</div><div class="why" id="why">Scanning... no setup yet</div><div id="lvl"></div></div>
+
+<div class="card"><div id="chart"></div></div>
+
+<div class="card"><h3>Position size</h3>
+<div class="row"><div><label>Balance (USD)</label><input id="bal" type="number" inputmode="decimal" value="100"></div>
+<div><label>Risk per trade %</label><input id="rk" type="number" inputmode="decimal" value="1"></div></div>
+<div class="out" id="pos">Waiting for a signal to size the trade.</div></div>
+
+<div class="card"><h3>Strategy test (last 500 candles)</h3><div class="out" id="bt">Calculating...</div></div>
+
+<div class="card"><h3>Signal history</h3><div id="hist" class="out"></div></div>
+<footer>Signals are rule-based, not financial advice. Prices may differ slightly from Exness. Never risk money you can't afford to lose.</footer>
+
+<script>
+const M={scalp:{tf:'5m',htf:'15m',n:'Scalp 5m'},day:{tf:'15m',htf:'1h',n:'Day 15m'}};
+let mode='scalp',C=[],H=[],ws,active=null,cool=0,chart,cs,e20s,e50s,e200s,plines=[],ac,wake;
+const $=id=>document.getElementById(id),f=n=>'$'+Math.round(n).toLocaleString('en-US');
+const LS={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let hist=LS.get('sou_hist',[]);
+
+/* indicators */
+function ema(a,n){const k=2/(n+1),o=[];let e=a[0];for(let i=0;i<a.length;i++){e=i?a[i]*k+e*(1-k):a[0];o.push(e)}return o}
+function rsi(a,n=14){const o=Array(a.length).fill(50);let g=0,l=0;for(let i=1;i<a.length;i++){const d=a[i]-a[i-1],up=Math.max(d,0),dn=Math.max(-d,0);if(i<=n){g+=up/n;l+=dn/n}else{g=(g*(n-1)+up)/n;l=(l*(n-1)+dn)/n}if(i>=n)o[i]=l===0?100:100-100/(1+g/l)}return o}
+function atr(c,n=14){const o=[];let a=0;for(let i=0;i<c.length;i++){const tr=i?Math.max(c[i].h-c[i].l,Math.abs(c[i].h-c[i-1].c),Math.abs(c[i].l-c[i-1].c)):c[i].h-c[i].l;a=i<n?(a*i+tr)/(i+1):(a*(n-1)+tr)/n;o.push(a)}return o}
+function ind(c){const cl=c.map(x=>x.c),m1=ema(cl,12),m2=ema(cl,26),mc=m1.map((v,i)=>v-m2[i]),sg=ema(mc,9);return{e20:ema(cl,20),e50:ema(cl,50),e200:ema(cl,200),rsi:rsi(cl),atr:atr(c),hist:mc.map((v,i)=>v-sg[i])}}
+
+/* signal rules at closed index i, with htf trend */
+function trendAt(I,h,j){if(j<200)return 0;const c=h[j].c;if(c>I.e200[j]&&I.e50[j]>I.e200[j])return 1;if(c<I.e200[j]&&I.e50[j]<I.e200[j])return -1;return 0}
+function check(c,I,i,tr){
+ if(i<205||!tr)return null;const x=c[i],R=I.rsi,a=I.atr[i];
+ if(tr===1){
+  const pb=[0,1,2].some(k=>c[i-k].l<=Math.max(I.e20[i-k],I.e50[i-k])),back=x.c>I.e20[i];
+  const rs=Math.min(R[i-1],R[i-2],R[i-3])<45&&R[i]>45&&R[i]<70,mh=I.hist[i]>I.hist[i-1];
+  if(pb&&back&&rs&&mh){let lo=Math.min(...c.slice(i-4,i+1).map(z=>z.l)),sl=lo-.3*a;if(x.c-sl<a)sl=x.c-1.2*a;const r=x.c-sl;
+   return{side:'BUY',entry:x.c,sl,tp1:x.c+2*r,tp2:x.c+3*r,r,t:x.t,why:`Uptrend on ${M[mode].htf}, pullback to the EMAs on ${M[mode].tf}, RSI recovering (${R[i].toFixed(0)}), momentum turning up.`}}}
+ else{
+  const pb=[0,1,2].some(k=>c[i-k].h>=Math.min(I.e20[i-k],I.e50[i-k])),back=x.c<I.e20[i];
+  const rs=Math.max(R[i-1],R[i-2],R[i-3])>55&&R[i]<55&&R[i]>30,mh=I.hist[i]<I.hist[i-1];
+  if(pb&&back&&rs&&mh){let hi=Math.max(...c.slice(i-4,i+1).map(z=>z.h)),sl=hi+.3*a;if(sl-x.c<a)sl=x.c+1.2*a;const r=sl-x.c;
+   return{side:'SELL',entry:x.c,sl,tp1:x.c-2*r,tp2:x.c-3*r,r,t:x.t,why:`Downtrend on ${M[mode].htf}, bounce into the EMAs on ${M[mode].tf}, RSI weakening (${R[i].toFixed(0)}), momentum turning down.`}}}
+ return null}
+const closed=a=>a.length&&!a[a.length-1].x?a.slice(0,-1):a;
+function htfIdx(h,T){let j=h.length-1;while(j>=0&&h[j].T>T)j--;return j}
+
+/* data */
+const parse=k=>({t:k[0]/1000,o:+k[1],h:+k[2],l:+k[3],c:+k[4],T:k[6],x:k[6]<Date.now()});
+async function kl(tf){for(const b of['https://data-api.binance.vision','https://api.binance.com']){try{const r=await fetch(`${b}/api/v3/klines?symbol=BTCUSDT&interval=${tf}&limit=500`);if(r.ok)return(await r.json()).map(parse)}catch(e){}}throw 0}
+async function load(){
+ $('trend').textContent='Loading market...';try{[C,H]=await Promise.all([kl(M[mode].tf),kl(M[mode].htf)])}catch(e){$('trend').textContent='Could not reach Binance. Check internet and reload.';return}
+ cs.setData(C.map(({t,o,h,l,c})=>({time:t,open:o,high:h,low:l,close:c})));drawEMA();backtest();scanNow();conn();
+}
+function conn(){
+ if(ws){ws.onclose=null;ws.close()}const s=`btcusdt@kline_${M[mode].tf}/btcusdt@kline_${M[mode].htf}`;let alt=0;
+ const open=()=>{ws=new WebSocket((alt?'wss://stream.binance.com:9443':'wss://data-stream.binance.vision')+'/stream?streams='+s);
+  ws.onopen=()=>{$('dot').className='dot on';$('lt').textContent='LIVE'};
+  ws.onclose=()=>{$('dot').className='dot';$('lt').textContent='RECONNECTING';alt^=1;setTimeout(open,2000)};
+  ws.onmessage=e=>{const k=JSON.parse(e.data).data.k,arr=k.i===M[mode].tf?C:H,o={t:k.t/1000,o:+k.o,h:+k.h,l:+k.l,c:+k.c,T:k.T,x:k.x};
+   if(arr.length&&arr[arr.length-1].t===o.t)arr[arr.length-1]=o;else{arr.push(o);if(arr.length>600)arr.shift()}
+   if(arr===C){cs.update({time:o.t,open:o.o,high:o.h,low:o.l,close:o.c});tick(o.c);if(k.x){drawEMA();onClose()}}}};
+ open()}
+
+/* live logic */
+let lastPx=0;
+function tick(p){const el=$('px');el.textContent=f(p);el.style.color=p>=lastPx?'var(--g)':'var(--r)';lastPx=p;track(p);document.title=active&&!active.done?`${active.side} NOW · ${f(p)}`:`${f(p)} · Sou BTC`;showPos()}
+function onClose(){if(cool>0)cool--;scanNow(true)}
+function scanNow(fire){
+ const c=closed(C),h=closed(H),I=ind(c),HI=ind(h),i=c.length-1,j=htfIdx(h,c[i].T),tr=trendAt(HI,h,j);
+ $('trend').innerHTML=`${M[mode].htf} trend: <b class="${tr>0?'g':tr<0?'r':'y'}">${tr>0?'UP':tr<0?'DOWN':'SIDEWAYS (no trades)'}</b> · RSI ${I.rsi[i].toFixed(0)} · ATR ${f(I.atr[i])}`;
+ if(!fire||(active&&!active.done)||cool>0)return;const s=check(c,I,i,tr);if(!s)return;
+ s.mode=M[mode].n;s.res='open';s.time=new Date().toLocaleString();active=s;cool=6;hist.unshift(s);hist=hist.slice(0,50);LS.set('sou_hist',hist);
+ alertNew(s);render();
+}
+function track(p){if(!active||active.done)return;const b=active.side==='BUY',s=active;
+ const hit=(lv)=>b?p>=lv:p<=lv,stop=b?p<=(s.tp1hit?s.entry:s.sl):p>=(s.tp1hit?s.entry:s.sl);
+ if(!s.tp1hit&&hit(s.tp1)){s.tp1hit=1;s.res='TP1';beep([880,1100],.15);s.msg='TP1 HIT. Close half and move stop loss to entry.'}
+ if(s.tp1hit&&hit(s.tp2)){s.res='TP2';s.done=1;beep([880,1100,1320],.15);s.msg='TP2 HIT. Full target reached.'}
+ else if(stop){s.res=s.tp1hit?'TP1':'SL';s.done=1;beep([300,220],.3);s.msg=s.tp1hit?'Closed at entry after TP1. Profit kept.':'STOPPED OUT. Small loss, wait for the next setup.'}
+ if(s.res!=='open'){LS.set('sou_hist',hist);render()}}
+function render(){
+ const s=active,el=$('sig');plines.forEach(l=>cs.removePriceLine(l));plines=[];
+ if(!s||s.done){el.className='card wait';el.querySelector('.big').textContent='WAIT';$('why').textContent=s?s.msg:'Scanning... no setup yet';$('lvl').innerHTML=s?`<div class="st ${s.res==='SL'?'r':'g'}">Last: ${s.side} ${f(s.entry)} → ${s.res}</div>`:'';renderHist();return}
+ el.className='card '+(s.side==='BUY'?'buy':'sell');el.querySelector('.big').textContent=s.side+' NOW';$('why').textContent=s.why;
+ const box=(n,v,cl)=>`<div><small>${n}<button onclick="cp(${Math.round(v)})">copy</button></small><b class="mono ${cl}">${f(v)}</b></div>`;
+ $('lvl').innerHTML=`<div class="lv">${box('Entry',s.entry,'')}${box('Stop Loss',s.sl,'r')}${box('Take Profit 1',s.tp1,'g')}${box('Take Profit 2',s.tp2,'g')}</div><div class="st y">${s.msg||'Risk:Reward 1:2 and 1:3 · Risk '+f(s.r)+' per BTC'}</div>`;
+ [['Entry',s.entry,'#e6e9f0'],['SL',s.sl,'#ea3943'],['TP1',s.tp1,'#16c784'],['TP2',s.tp2,'#16c784']].forEach(([t,p,c])=>plines.push(cs.createPriceLine({price:p,color:c,lineWidth:1,lineStyle:2,title:t})));
+ renderHist();showPos()}
+function showPos(){const s=active&&!active.done?active:null,b=+$('bal').value||0,rk=+$('rk').value||0,risk=b*rk/100;
+ if(!s){$('pos').innerHTML=`You risk <b>${'$'+risk.toFixed(2)}</b> per trade. Size appears when a signal fires.`;return}
+ const sz=risk/s.r;$('pos').innerHTML=`Risk: <b>$${risk.toFixed(2)}</b> · Stop distance: <b>${f(s.r)}</b><br>Size: <b class="y mono">${sz.toFixed(4)} BTC</b> = <b class="y mono">${sz.toFixed(2)} lots</b> on Exness BTCUSD (1 lot = 1 BTC)<br><span style="color:var(--mut);font-size:12px">If the size is below 0.01 lot, your stop is too wide for this balance. Skip or lower risk carefully.</span>`}
+function renderHist(){if(!hist.length){$('hist').innerHTML='<span style="color:var(--mut)">No signals yet.</span>';return}
+ const d=hist.filter(h=>h.res!=='open'),w=d.filter(h=>h.res!=='SL').length;
+ $('hist').innerHTML=(d.length?`<div style="margin-bottom:6px">Win rate: <b class="y">${Math.round(w/d.length*100)}%</b> (${w}/${d.length})</div>`:'')+hist.slice(0,20).map(h=>`<div class="hi"><span>${h.time.split(',')[1]||h.time} · ${h.mode}</span><span class="${h.side==='BUY'?'g':'r'}">${h.side} ${f(h.entry)}</span><b class="${h.res==='SL'?'r':h.res==='open'?'y':'g'}">${h.res}</b></div>`).join('')}
+
+/* backtest: half closed at TP1, rest to TP2 or breakeven */
+function backtest(){const c=closed(C),h=closed(H),I=ind(c),HI=ind(h);let cd=0,n=0,w=0,R=0;
+ for(let i=205;i<c.length-1;i++){if(cd>0){cd--;continue}const s=check(c,I,i,trendAt(HI,h,htfIdx(h,c[i].T)));if(!s)continue;cd=6;
+  const b=s.side==='BUY';let t1=0,res=null;
+  for(let k=i+1;k<c.length&&!res;k++){const x=c[k],stp=t1?s.entry:s.sl;
+   if(b?x.l<=stp:x.h>=stp){res=t1?1:-1;break}if(!t1&&(b?x.h>=s.tp1:x.l<=s.tp1))t1=1;if(t1&&(b?x.h>=s.tp2:x.l<=s.tp2))res=2.5}
+  if(res===null)continue;n++;R+=res;if(res>0)w++}
+ $('bt').innerHTML=n?`${n} signals · Win rate <b class="y">${Math.round(w/n*100)}%</b> · Result <b class="${R>=0?'g':'r'}">${R>=0?'+':''}${R.toFixed(1)}R</b><br><span style="color:var(--mut);font-size:12px">R = what you risk per trade. +3R at 1% risk ≈ +3% of your balance. Past results don't guarantee future ones.</span>`:'No signals in the last 500 candles. The rules are strict on purpose.'}
+
+/* alerts */
+function beep(fr,d){try{if(!ac)return;fr.forEach((q,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=q;o.type='square';g.gain.value=.25;o.connect(g).connect(ac.destination);o.start(ac.currentTime+i*(d+.08));o.stop(ac.currentTime+i*(d+.08)+d)})}catch(e){}}
+function alertNew(s){const q=s.side==='BUY'?[988,988,1319]:[660,660,440];beep(q,.22);setTimeout(()=>beep(q,.22),1100);
+ try{navigator.vibrate&&navigator.vibrate([400,200,400,200,400])}catch(e){}
+ try{if(window.Notification&&Notification.permission==='granted')new Notification(`${s.side} NOW BTC`,{body:`Entry ${f(s.entry)} · SL ${f(s.sl)} · TP1 ${f(s.tp1)} · TP2 ${f(s.tp2)}`})}catch(e){}}
+async function keepAwake(){try{wake=await navigator.wakeLock.request('screen')}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){keepAwake();load()}});
+function cp(v){try{navigator.clipboard.writeText(String(v))}catch(e){}}
+
+/* chart */
+function drawEMA(){const c=closed(C),I=ind(c),m=(a)=>c.map((x,i)=>({time:x.t,value:a[i]})).slice(200);e20s.setData(m(I.e20));e50s.setData(m(I.e50));e200s.setData(m(I.e200))}
+function initChart(){chart=LightweightCharts.createChart($('chart'),{layout:{background:{color:'#131824'},textColor:'#7d869a'},grid:{vertLines:{color:'#1a2030'},horzLines:{color:'#1a2030'}},timeScale:{timeVisible:true,borderColor:'#222a3a'},rightPriceScale:{borderColor:'#222a3a'},autoSize:true});
+ cs=chart.addCandlestickSeries({upColor:'#16c784',downColor:'#ea3943',borderVisible:false,wickUpColor:'#16c784',wickDownColor:'#ea3943'});
+ const L=c=>chart.addLineSeries({color:c,lineWidth:1,priceLineVisible:false,lastValueVisible:false});e20s=L('#f5b942');e50s=L('#5b8def');e200s=L('#b06cff')}
+
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{if(b.dataset.m===mode)return;document.querySelectorAll('.seg button').forEach(x=>x.classList.remove('act'));b.classList.add('act');mode=b.dataset.m;active=null;cool=0;render();load()});
+['bal','rk'].forEach(id=>{$(id).value=LS.get('sou_'+id,$(id).value);$(id).oninput=()=>{LS.set('sou_'+id,$(id).value);showPos()}});
+$('go').onclick=()=>{try{ac=new(window.AudioContext||window.webkitAudioContext)();beep([660,880],.1)}catch(e){}try{window.Notification&&Notification.requestPermission()}catch(e){}keepAwake();$('start').remove()};
+initChart();renderHist();load();
+</script>
+</body>
+</html>
