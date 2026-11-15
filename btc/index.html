@@ -68,7 +68,7 @@ footer{color:var(--mut);font-size:11px;text-align:center;margin-top:14px;line-he
 <div><label>Risk per trade %</label><input id="rk" type="number" inputmode="decimal" value="1"></div></div>
 <div class="out" id="pos">Waiting for a signal to size the trade.</div></div>
 
-<div class="card"><h3>Strategy test (last 500 candles)</h3><div class="out" id="bt">Calculating...</div></div>
+<div class="card"><h3>Strategy test (recent candles)</h3><div class="out" id="bt">Calculating...</div></div>
 
 <div class="card"><h3>Signal history</h3><div id="hist" class="out"></div></div>
 <footer>Signals are rule-based, not financial advice. Prices may differ slightly from Exness. Never risk money you can't afford to lose.</footer>
@@ -106,20 +106,32 @@ function htfIdx(h,T){let j=h.length-1;while(j>=0&&h[j].T>T)j--;return j}
 
 /* data */
 const parse=k=>({t:k[0]/1000,o:+k[1],h:+k[2],l:+k[3],c:+k[4],T:k[6],x:k[6]<Date.now()});
-async function kl(tf){for(const b of['https://data-api.binance.vision','https://api.binance.com']){try{const r=await fetch(`${b}/api/v3/klines?symbol=BTCUSDT&interval=${tf}&limit=500`);if(r.ok)return(await r.json()).map(parse)}catch(e){}}throw 0}
+const GR={'5m':300,'15m':900,'1h':3600};let src='',lastMsg=0,pollT,lastBarT=0;
+async function get(u){const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),6000);try{const r=await fetch(u,{signal:ctl.signal});if(!r.ok)throw r.status;return await r.json()}finally{clearTimeout(tm)}}
+async function kl(tf,lim=500){
+ for(const b of['https://data-api.binance.vision','https://api.binance.com','https://api1.binance.com','https://api3.binance.com']){try{const d=await get(`${b}/api/v3/klines?symbol=BTCUSDT&interval=${tf}&limit=${lim}`);src='Binance';return d.map(parse)}catch(e){}}
+ try{const g=GR[tf],d=await get(`https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=${g}`);src='Coinbase';
+  return d.reverse().map(k=>({t:k[0],o:k[3],h:k[2],l:k[1],c:k[4],T:(k[0]+g)*1000-1,x:(k[0]+g)*1000<=Date.now()}))}catch(e){}
+ throw new Error('no data')}
 async function load(){
- $('trend').textContent='Loading market...';try{[C,H]=await Promise.all([kl(M[mode].tf),kl(M[mode].htf)])}catch(e){$('trend').textContent='Could not reach Binance. Check internet and reload.';return}
- cs.setData(C.map(({t,o,h,l,c})=>({time:t,open:o,high:h,low:l,close:c})));drawEMA();backtest();scanNow();conn();
+ $('trend').textContent='Loading market...';try{[C,H]=await Promise.all([kl(M[mode].tf),kl(M[mode].htf)])}catch(e){$('trend').innerHTML='<b class="r">Could not load prices. Check your internet or turn on a VPN, then reload.</b>';return}
+ cs.setData(C.map(({t,o,h,l,c})=>({time:t,open:o,high:h,low:l,close:c})));lastBarT=C[C.length-1].t;tick(C[C.length-1].c);drawEMA();backtest();scanNow();conn();
+ clearInterval(pollT);pollT=setInterval(()=>{if(Date.now()-lastMsg>8000)poll()},4000);
 }
+function merge(arr,o){const L=arr[arr.length-1];let closedNow=false;
+ if(L&&L.t===o.t)arr[arr.length-1]=o;else if(!L||o.t>L.t){if(L&&!L.x){L.x=true;closedNow=true}arr.push(o);if(arr.length>600)arr.shift()}
+ if(o.x&&!(L&&L.t===o.t&&L.x))closedNow=true;return closedNow}
+function apply(o,isTf){const arr=isTf?C:H,cl=merge(arr,o);if(isTf){if(o.t<lastBarT)return;lastBarT=o.t;cs.update({time:o.t,open:o.o,high:o.h,low:o.l,close:o.c});tick(o.c);if(cl){drawEMA();onClose()}}}
+async function poll(){try{const[a,b]=await Promise.all([kl(M[mode].tf,3),kl(M[mode].htf,3)]);b.slice(-3).forEach(o=>apply(o,false));a.slice(-3).forEach(o=>apply(o,true));
+ $('dot').className='dot on';$('lt').textContent='LIVE · '+src}catch(e){$('dot').className='dot';$('lt').textContent='OFFLINE'}}
 function conn(){
  if(ws){ws.onclose=null;ws.close()}const s=`btcusdt@kline_${M[mode].tf}/btcusdt@kline_${M[mode].htf}`;let alt=0;
- const open=()=>{ws=new WebSocket((alt?'wss://stream.binance.com:9443':'wss://data-stream.binance.vision')+'/stream?streams='+s);
-  ws.onopen=()=>{$('dot').className='dot on';$('lt').textContent='LIVE'};
-  ws.onclose=()=>{$('dot').className='dot';$('lt').textContent='RECONNECTING';alt^=1;setTimeout(open,2000)};
-  ws.onmessage=e=>{const k=JSON.parse(e.data).data.k,arr=k.i===M[mode].tf?C:H,o={t:k.t/1000,o:+k.o,h:+k.h,l:+k.l,c:+k.c,T:k.T,x:k.x};
-   if(arr.length&&arr[arr.length-1].t===o.t)arr[arr.length-1]=o;else{arr.push(o);if(arr.length>600)arr.shift()}
-   if(arr===C){cs.update({time:o.t,open:o.o,high:o.h,low:o.l,close:o.c});tick(o.c);if(k.x){drawEMA();onClose()}}}};
+ const open=()=>{try{ws=new WebSocket((alt?'wss://stream.binance.com:9443':'wss://data-stream.binance.vision')+'/stream?streams='+s)}catch(e){return}
+  ws.onclose=()=>{alt^=1;setTimeout(open,3000)};
+  ws.onmessage=e=>{const k=JSON.parse(e.data).data.k;lastMsg=Date.now();$('dot').className='dot on';$('lt').textContent='LIVE';
+   apply({t:k.t/1000,o:+k.o,h:+k.h,l:+k.l,c:+k.c,T:k.T,x:k.x},k.i===M[mode].tf)}};
  open()}
+window.onerror=(m)=>{$('trend').innerHTML='<b class="r">App error: '+m+'</b>'};
 
 /* live logic */
 let lastPx=0;
@@ -160,7 +172,7 @@ function backtest(){const c=closed(C),h=closed(H),I=ind(c),HI=ind(h);let cd=0,n=
   for(let k=i+1;k<c.length&&!res;k++){const x=c[k],stp=t1?s.entry:s.sl;
    if(b?x.l<=stp:x.h>=stp){res=t1?1:-1;break}if(!t1&&(b?x.h>=s.tp1:x.l<=s.tp1))t1=1;if(t1&&(b?x.h>=s.tp2:x.l<=s.tp2))res=2.5}
   if(res===null)continue;n++;R+=res;if(res>0)w++}
- $('bt').innerHTML=n?`${n} signals · Win rate <b class="y">${Math.round(w/n*100)}%</b> · Result <b class="${R>=0?'g':'r'}">${R>=0?'+':''}${R.toFixed(1)}R</b><br><span style="color:var(--mut);font-size:12px">R = what you risk per trade. +3R at 1% risk ≈ +3% of your balance. Past results don't guarantee future ones.</span>`:'No signals in the last 500 candles. The rules are strict on purpose.'}
+ $('bt').innerHTML=n?`${n} signals · Win rate <b class="y">${Math.round(w/n*100)}%</b> · Result <b class="${R>=0?'g':'r'}">${R>=0?'+':''}${R.toFixed(1)}R</b><br><span style="color:var(--mut);font-size:12px">R = what you risk per trade. +3R at 1% risk ≈ +3% of your balance. Past results don't guarantee future ones.</span>`:'No signals in recent candles. The rules are strict on purpose.'}
 
 /* alerts */
 function beep(fr,d){try{if(!ac)return;fr.forEach((q,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=q;o.type='square';g.gain.value=.25;o.connect(g).connect(ac.destination);o.start(ac.currentTime+i*(d+.08));o.stop(ac.currentTime+i*(d+.08)+d)})}catch(e){}}
